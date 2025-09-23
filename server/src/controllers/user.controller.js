@@ -34,10 +34,9 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(409, "User already exists");
     }
 
-    let avatarLocalPath = req.file?.path; // multer gives this
+    let avatarLocalPath = req.file?.path;
     let avatar = null;
 
-    // Only upload to Cloudinary if file exists
     if (avatarLocalPath) {
         avatar = await uploadOnCloudinary(avatarLocalPath);
     }
@@ -47,7 +46,7 @@ const registerUser = asyncHandler(async (req, res) => {
         email,
         fullName,
         password,
-        avatar: avatar?.url || "", // store only URL
+        avatar: avatar?.url || "",
     });
 
     const createdUser = await User.findById(user._id).select("-password -refreshToken");
@@ -62,51 +61,30 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-    console.log("=== LOGIN CONTROLLER START ===");
-    console.log("Request body:", req.body);
-    console.log("Request headers:", req.headers);
-    
     const {email, password} = req.body
 
-    // Validate input
     if (!email) {
-        console.log("ERROR: No email provided");
         throw new ApiError(400, "Email is required")
     }
 
     if (!password) {
-        console.log("ERROR: No password provided");
         throw new ApiError(400, "Password is required")
     }
 
-    console.log("Looking for user with email:", email);
-
     try {
-        // Find user by email only
         const user = await User.findOne({email})
-
-        console.log("User found:", user ? "YES" : "NO");
 
         if (!user) {
             throw new ApiError(404, "User doesn't exist")
         }
 
-        console.log("Checking password...");
-        
-        // Check password
         const isPasswordValid = await user.isPasswordCorrect(password)
-        console.log("Password valid:", isPasswordValid);
         
         if (!isPasswordValid) {
             throw new ApiError(401, "Invalid password")
         }
 
-        console.log("Generating tokens...");
-        
-        // Generate tokens
         const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)
-        
-        console.log("Tokens generated successfully");
         
         const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
@@ -115,8 +93,6 @@ const loginUser = asyncHandler(async (req, res) => {
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax'
         }
-
-        console.log("Sending response...");
 
         return res
             .status(200)
@@ -134,8 +110,7 @@ const loginUser = asyncHandler(async (req, res) => {
                 )
             )
     } catch (error) {
-        console.error("=== LOGIN ERROR ===", error);
-        throw error; // Re-throw to let asyncHandler handle it
+        throw error;
     }
 })
 
@@ -153,7 +128,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, "User logged out successfully"));
 });
-
 
 const getUser = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
@@ -191,7 +165,6 @@ const getUserReviews = asyncHandler(async (req, res) => {
       .json(new ApiResponse(200, [], "No reviews found"));
   }
 
-  // Extract user's reviews with item information
   const userReviews = [];
   
   items.forEach(item => {
@@ -217,82 +190,159 @@ const getUserReviews = asyncHandler(async (req, res) => {
     }
   });
 
-  // Sort by most recent reviews first
   userReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return res
     .status(200)
-    .json(new ApiResponse(200, userReviews, "User reviews fetched successfully"));
+    .json(new ApiResponse(200, userReviews, "User reviews written fetched successfully"));
+});
+
+const getReceivedReviews = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!userId) {
+    throw new ApiError(401, "User ID not found in request");
+  }
+
+  const items = await Item.find({
+    postedBy: userId,
+    "reviews.0": { $exists: true }
+  })
+  .populate("reviews.reviewBy", "username fullName avatar")
+  .select("name picture price reviews");
+
+  if (!items || items.length === 0) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, [], "No reviews received"));
+  }
+
+  const receivedReviews = [];
+  
+  items.forEach(item => {
+    item.reviews.forEach(review => {
+      receivedReviews.push({
+        _id: review._id,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+        reviewBy: review.reviewBy,
+        item: {
+          _id: item._id,
+          name: item.name,
+          picture: item.picture,
+          price: item.price
+        }
+      });
+    });
+  });
+
+  receivedReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, receivedReviews, "Received reviews fetched successfully"));
 });
 
 const viewOtherProfile = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
     const { otherUserId } = req.params;
 
-    if(!userId) 
-    {
-        throw new ApiError(400, "User not found")
+    if (!userId) {
+        throw new ApiError(401, "Authentication required")
     }
     
+    if (userId.toString() === otherUserId) {
+        throw new ApiError(400, "Use /me endpoint to view your own profile")
+    }
+
     const otherUser = await User.findById(otherUserId)
-    if(!otherUser)
-    {
+        .select("-password -refreshToken -email")
+        .populate("ratings.ratedBy", "username fullName");
+
+    if (!otherUser) {
         throw new ApiError(404, "User doesn't exist")
     }
 
+    let averageRating = 0;
+    if (otherUser.ratings && otherUser.ratings.length > 0) {
+        const totalRating = otherUser.ratings.reduce((sum, rating) => sum + rating.rating, 0);
+        averageRating = (totalRating / otherUser.ratings.length).toFixed(1);
+    }
+
+    const postedItems = await Item.find({ postedBy: otherUserId })
+        .select("name picture price category createdAt")
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+    const profileData = {
+        ...otherUser.toObject(),
+        averageRating: parseFloat(averageRating),
+        totalRatings: otherUser.ratings?.length || 0,
+        postedItems
+    };
+
     return res
         .status(200)
-        .json(new ApiResponse(200, otherUser, "User fetched successfully"));
+        .json(new ApiResponse(200, profileData, "User profile fetched successfully"));
 })
 
-const rateUser = asyncHandler(async (req,res) => {
+const rateUser = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
     const { otherUserId } = req.params;
 
-    if(!userId) 
-    {
-        throw new ApiError(400, "User not found")
+    if (!userId) {
+        throw new ApiError(401, "Authentication required")
     }
 
-    const otherUser = await User.findById(otherUserId)
-    if(!otherUser)
-    {
+    if (userId.toString() === otherUserId) {
+        throw new ApiError(400, "You cannot rate yourself")
+    }
+
+    const otherUser = await User.findById(otherUserId);
+    if (!otherUser) {
         throw new ApiError(404, "User doesn't exist")
     }
 
     const { rating } = req.body;
-    if(!rating || rating < 1 || rating > 5){
-        throw  new ApiError(401, "No rating provided")
+    if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        throw new ApiError(400, "Rating must be an integer between 1 and 5")
     }
 
-    if(otherUser.role === 'buyer')
-    {
-        throw new ApiError("You cannot rate a buyer")
+    if (otherUser.role === 'buyer') {
+        throw new ApiError(400, "You can only rate sellers")
     }
 
-    const existingRating = otherUser.ratings.find(
+    const existingRatingIndex = otherUser.ratings.findIndex(
         rate => rate.ratedBy.toString() === userId.toString()
-    )
+    );
 
-    if(existingRating)
-    {
-        throw new ApiError("You already rated the user once")
+    if (existingRatingIndex !== -1) {
+        otherUser.ratings[existingRatingIndex].rating = Number(rating);
+        await otherUser.save();
+        
+        const updatedUser = await User.findById(otherUserId)
+            .populate("ratings.ratedBy", "username fullName");
+        
+        return res
+            .status(200)
+            .json(new ApiResponse(200, updatedUser.ratings[existingRatingIndex], "Rating updated successfully"))
+    } else {
+        const newRating = {
+            rating: Number(rating),
+            ratedBy: userId
+        };
+
+        otherUser.ratings.push(newRating);
+        await otherUser.save();
+
+        await otherUser.populate("ratings.ratedBy", "username fullName");
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, newRating, "User rated successfully"))
     }
-
-    const newRating= {
-        rating: Number(rating),
-        ratedBy: userId
-    }
-
-    otherUser.ratings.push(newRating);
-    await otherUser.save();
-
-    await otherUser.populate("ratings.ratedBy" , "username fullName")
-
-    return res
-    .status(200)
-    .json(new ApiResponse(200, newRating, "User rated successfully"))
-    
 })
 
-export {registerUser, loginUser, getUser, logoutUser, getUserReviews, viewOtherProfile, rateUser}
+export {registerUser, loginUser, getUser, logoutUser, getUserReviews, getReceivedReviews, viewOtherProfile, rateUser}

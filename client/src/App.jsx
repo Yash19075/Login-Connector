@@ -28,7 +28,7 @@ function App() {
           <Route path="/create-item" element={<CreateItem />} />
           <Route path="/all-items" element={<AllItems />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/profile\:otherUserId" element={<OtherProfilePage />} />
+          <Route path="/profile/:userId" element={<OtherProfilePage />} />
           <Route path="/item/:itemId" element={<ItemDetail />} />
           <Route path="/item/:itemId/updateItem" element={<UpdateItem />} />
           <Route path="/items/:itemId/buy" element={<BuyItemPage />} />

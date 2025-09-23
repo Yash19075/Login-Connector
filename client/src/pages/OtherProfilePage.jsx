@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Mail, User, Shield, Star, Calendar, ArrowLeft } from "lucide-react";
+import {
+  User,
+  Shield,
+  Star,
+  Calendar,
+  Image,
+  Package,
+  ArrowLeft,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "../context/AuthContext";
 import { Axios } from "../lib/axios";
 
@@ -16,57 +23,92 @@ const OtherProfilePage = () => {
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
 
-  const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [ratingLoading, setRatingLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [rating, setRating] = useState(0);
-  const [hoveredRating, setHoveredRating] = useState(0);
-  const [isRating, setIsRating] = useState(false);
-  const [ratingSuccess, setRatingSuccess] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [hasRated, setHasRated] = useState(false);
 
   useEffect(() => {
-    if (userId) {
-      fetchUserProfile();
+    console.log("useEffect triggered with userId:", userId);
+    if (!userId) {
+      console.log("No userId provided");
+      return;
     }
+    fetchUserProfile();
   }, [userId]);
 
   const fetchUserProfile = async () => {
     try {
+      console.log("Fetching profile for userId:", userId);
       setLoading(true);
       setError(null);
       const response = await Axios.get(`/users/${userId}`);
-      setUser(response.data.data);
+
+      console.log("Full API Response:", response);
+      console.log("Response data:", response.data);
+
+      // Handle the nested data structure from your API
+      const profileData = response.data?.data || response.data;
+
+      console.log("Profile data extracted:", profileData);
+
+      if (!profileData) {
+        throw new Error("No profile data received");
+      }
+
+      setUserProfile(profileData);
+
+      // Check for existing rating
+      if (profileData.ratings && authUser?._id) {
+        console.log("Checking ratings:", profileData.ratings);
+        console.log("Auth user ID:", authUser._id);
+
+        const existingRating = profileData.ratings.find(
+          (rating) => rating.ratedBy._id === authUser._id
+        );
+
+        console.log("Existing rating found:", existingRating);
+
+        if (existingRating) {
+          setHasRated(true);
+          setSelectedRating(existingRating.rating);
+        }
+      }
     } catch (err) {
-      setError("Failed to load user profile");
       console.error("Profile fetch error:", err);
+      console.error("Error response:", err.response?.data);
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to load user profile"
+      );
+      setUserProfile(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRateUser = async () => {
-    if (rating === 0) {
-      setError("Please select a rating");
-      return;
-    }
+  const handleRateUser = async (rating) => {
+    if (ratingLoading) return;
 
     try {
-      setIsRating(true);
+      console.log("Rating user with:", rating);
+      setRatingLoading(true);
       setError(null);
 
-      await Axios.post(`/users/${userId}/rate`, {
-        rating: rating,
-      });
+      const response = await Axios.post(`/users/${userId}/rate`, { rating });
+      console.log("Rating response:", response);
 
-      setRatingSuccess(true);
-      setRating(0);
-      // Refresh user data to show updated rating
-      fetchUserProfile();
+      setSelectedRating(rating);
+      setHasRated(true);
+      await fetchUserProfile();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to rate user");
       console.error("Rating error:", err);
+      setError(err.response?.data?.message || "Failed to rate user");
     } finally {
-      setIsRating(false);
+      setRatingLoading(false);
     }
   };
 
@@ -85,40 +127,31 @@ const OtherProfilePage = () => {
       : "bg-green-500 hover:bg-green-600";
   };
 
-  const calculateAverageRating = (ratings) => {
-    if (!ratings || ratings.length === 0) return 0;
-    const sum = ratings.reduce((acc, rating) => acc + rating.rating, 0);
-    return (sum / ratings.length).toFixed(1);
-  };
-
-  const renderStars = (
-    rating,
-    interactive = false,
-    onHover = null,
-    onClick = null
-  ) => {
+  const renderStars = (rating, interactive = false, onStarClick = null) => {
     return (
       <div className="flex items-center gap-1">
-        {[...Array(5)].map((_, index) => {
-          const starValue = index + 1;
-          const isActive = interactive
-            ? (hoveredRating || rating) >= starValue
-            : starValue <= rating;
-
-          return (
+        {[...Array(5)].map((_, index) => (
+          <button
+            key={index}
+            onClick={() => interactive && onStarClick && onStarClick(index + 1)}
+            disabled={!interactive || ratingLoading}
+            className={`${
+              interactive
+                ? "hover:scale-110 transition-transform cursor-pointer disabled:cursor-not-allowed"
+                : ""
+            }`}
+          >
             <Star
-              key={index}
-              className={`h-5 w-5 cursor-pointer transition-colors ${
-                isActive
+              className={`h-5 w-5 ${
+                index < rating
                   ? "fill-yellow-400 text-yellow-400"
-                  : "text-gray-300 hover:text-yellow-400"
+                  : interactive
+                  ? "text-gray-300 hover:text-yellow-300"
+                  : "text-gray-300"
               }`}
-              onMouseEnter={() => interactive && onHover && onHover(starValue)}
-              onMouseLeave={() => interactive && onHover && onHover(0)}
-              onClick={() => interactive && onClick && onClick(starValue)}
             />
-          );
-        })}
+          </button>
+        ))}
         {!interactive && (
           <span className="ml-2 text-sm text-muted-foreground">
             ({rating}/5)
@@ -128,75 +161,81 @@ const OtherProfilePage = () => {
     );
   };
 
+  // Debug logging
+  console.log("Render state:", {
+    loading,
+    userProfile,
+    error,
+    userId,
+    authUser: authUser?._id,
+  });
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          <p className="ml-4">Loading user profile...</p>
         </div>
       </div>
     );
   }
 
-  if (error && !user) {
+  if (error && !userProfile) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>Error: {error}</AlertDescription>
         </Alert>
-        <Button onClick={() => navigate(-1)} className="mt-4" variant="outline">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Go Back
-        </Button>
+        <div className="mt-4">
+          <Button onClick={fetchUserProfile} variant="outline">
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
+  // Add additional safety check
+  if (!userProfile) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Alert variant="destructive">
-          <AlertDescription>User not found</AlertDescription>
+          <AlertDescription>
+            No user profile data available. User ID: {userId}
+          </AlertDescription>
         </Alert>
+        <div className="mt-4">
+          <Button onClick={fetchUserProfile} variant="outline">
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
-
-  const averageRating = calculateAverageRating(user.ratings);
-  const hasAlreadyRated = user.ratings?.some(
-    (rate) => rate.ratedBy._id === authUser?._id
-  );
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="space-y-6">
-        {/* Header with Back Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button onClick={() => navigate(-1)} variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <h1 className="text-3xl font-bold">User Profile</h1>
-          </div>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold">User Profile</h1>
         </div>
 
-        {/* Alerts */}
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {ratingSuccess && (
-          <Alert>
-            <AlertDescription>
-              User rated successfully! Thank you for your feedback.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Profile Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -205,32 +244,35 @@ const OtherProfilePage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Avatar Section */}
             <div className="flex items-center space-x-6">
               <div className="relative">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={user.avatar} alt={user.fullName} />
+                  <AvatarImage
+                    src={userProfile.avatar}
+                    alt={userProfile.fullName}
+                  />
                   <AvatarFallback className="text-lg">
-                    {getInitials(user.fullName)}
+                    {getInitials(userProfile.fullName)}
                   </AvatarFallback>
                 </Avatar>
               </div>
               <div className="flex-1">
-                <h2 className="text-2xl font-semibold">{user.fullName}</h2>
-                <p className="text-muted-foreground">@{user.username}</p>
+                <h2 className="text-2xl font-semibold">
+                  {userProfile.fullName}
+                </h2>
+                <p className="text-muted-foreground">@{userProfile.username}</p>
                 <div className="mt-2 flex items-center gap-3">
-                  <Badge className={getRoleBadgeColor(user.role)}>
+                  <Badge className={getRoleBadgeColor(userProfile.role)}>
                     <Shield className="h-3 w-3 mr-1" />
-                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                    {userProfile.role.charAt(0).toUpperCase() +
+                      userProfile.role.slice(1)}
                   </Badge>
-                  {averageRating > 0 && (
+                  {userProfile.averageRating > 0 && (
                     <div className="flex items-center gap-1">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                       <span className="text-sm font-medium">
-                        {averageRating}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        ({user.ratings?.length || 0} reviews)
+                        {userProfile.averageRating} ({userProfile.totalRatings}{" "}
+                        reviews)
                       </span>
                     </div>
                   )}
@@ -238,14 +280,13 @@ const OtherProfilePage = () => {
               </div>
             </div>
 
-            {/* User Information */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-muted-foreground">
                   Full Name
                 </Label>
                 <div className="p-3 border rounded-md bg-muted/50">
-                  {user.fullName}
+                  {userProfile.fullName}
                 </div>
               </div>
 
@@ -254,7 +295,7 @@ const OtherProfilePage = () => {
                   Username
                 </Label>
                 <div className="p-3 border rounded-md bg-muted/50">
-                  @{user.username}
+                  @{userProfile.username}
                 </div>
               </div>
 
@@ -264,7 +305,7 @@ const OtherProfilePage = () => {
                 </Label>
                 <div className="p-3 border rounded-md bg-muted/50 flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  {new Date(user.createdAt).toLocaleDateString("en-US", {
+                  {new Date(userProfile.createdAt).toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "long",
                     day: "numeric",
@@ -274,95 +315,112 @@ const OtherProfilePage = () => {
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-muted-foreground">
-                  User Role
+                  Role
                 </Label>
                 <div className="p-3 border rounded-md bg-muted/50">
-                  {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                  {userProfile.role.charAt(0).toUpperCase() +
+                    userProfile.role.slice(1)}
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Rating Section */}
-        {authUser && authUser._id !== user._id && (
+        {userProfile.role === "seller" && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <StarIcon className="h-5 w-5" />
-                Rate This User
+                <Star className="h-5 w-5" />
+                Rate This Seller
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {hasAlreadyRated ? (
-                <div className="text-center py-4">
-                  <p className="text-muted-foreground">
-                    You have already rated this user.
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">
+                  {hasRated ? "Your Rating:" : "Rate this seller:"}
+                </Label>
+                {renderStars(
+                  selectedRating,
+                  !hasRated,
+                  !hasRated ? handleRateUser : null
+                )}
+                {hasRated && (
+                  <p className="text-sm text-muted-foreground">
+                    You have rated this seller {selectedRating} out of 5 stars.
                   </p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label>Your Rating</Label>
-                    {renderStars(rating, true, setHoveredRating, setRating)}
-                    <p className="text-xs text-muted-foreground">
-                      Click on the stars to rate this user (1-5 stars)
-                    </p>
-                  </div>
+                )}
+                {ratingLoading && (
+                  <p className="text-sm text-muted-foreground">
+                    Submitting your rating...
+                  </p>
+                )}
+              </div>
 
-                  <Button
-                    onClick={handleRateUser}
-                    disabled={rating === 0 || isRating}
-                    className="w-full"
-                  >
-                    {isRating ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Submitting Rating...
-                      </>
-                    ) : (
-                      "Submit Rating"
-                    )}
-                  </Button>
-                </>
+              {userProfile.averageRating > 0 && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Overall Rating:</span>
+                    <div className="flex items-center gap-2">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span className="font-medium">
+                        {userProfile.averageRating}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        ({userProfile.totalRatings} reviews)
+                      </span>
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* User Ratings Display */}
-        {user.ratings && user.ratings.length > 0 && (
+        {userProfile.postedItems && userProfile.postedItems.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5" />
-                User Reviews
-                <Badge variant="secondary">{user.ratings.length}</Badge>
+                <Package className="h-5 w-5" />
+                Recent Items
+                <Badge variant="secondary">
+                  {userProfile.postedItems.length}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {user.ratings.map((ratingItem, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={ratingItem.ratedBy?.avatar} />
-                          <AvatarFallback>
-                            {getInitials(ratingItem.ratedBy?.fullName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium text-sm">
-                            {ratingItem.ratedBy?.fullName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            @{ratingItem.ratedBy?.username}
-                          </p>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {userProfile.postedItems.map((item) => (
+                  <div
+                    key={item._id}
+                    className="border rounded-lg p-4 space-y-2"
+                  >
+                    <div className="w-full h-32 rounded-md overflow-hidden bg-muted">
+                      {item.picture ? (
+                        <img
+                          src={item.picture}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Image className="h-8 w-8 text-muted-foreground" />
                         </div>
-                      </div>
-                      {renderStars(ratingItem.rating)}
+                      )}
                     </div>
+                    <h4 className="font-medium text-sm truncate">
+                      {item.name}
+                    </h4>
+                    <p className="text-sm font-medium text-green-600">
+                      ${item.price}
+                    </p>
+                    {item.category && (
+                      <p className="text-xs text-muted-foreground">
+                        {item.category}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Posted {new Date(item.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
                 ))}
               </div>
