@@ -500,7 +500,7 @@ const BuyItemPage = () => {
                   <Link to="/all-items">Continue Shopping</Link>
                 </Button>
                 <Button variant="outline" asChild className="flex-1">
-                  <Link to={`/items/${itemId}`}>View Item</Link>
+                  <Link to={`/item/${itemId}`}>View Item</Link>
                 </Button>
               </div>
 

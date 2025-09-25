@@ -58,6 +58,10 @@ const itemSchema = new Schema(
       enum: ["in-stock", "out-of-stock"],
       default: "in-stock",
     },
+    category: {
+      type: String,
+      enum: ['Electronics', 'Fashion', 'Utilities', 'Entertainment']
+    },
     postedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",

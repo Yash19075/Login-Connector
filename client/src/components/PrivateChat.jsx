@@ -68,7 +68,7 @@ const PrivateChat = () => {
     setSendingMessage(true);
     try {
       const response = await Axios.post(
-        `/chats/${itemId}/private-message`,
+        `/chats/${itemId}/private-message/${otherUserId}`,
         { message: messageText },
         {
           headers: {
@@ -268,7 +268,7 @@ const PrivateChat = () => {
         {item && (
           <div className="mt-6 text-center">
             <Button asChild variant="outline">
-              <Link to={`/items/${item._id}`}>View Item Details</Link>
+              <Link to={`/item/${item._id}`}>View Item Details</Link>
             </Button>
           </div>
         )}

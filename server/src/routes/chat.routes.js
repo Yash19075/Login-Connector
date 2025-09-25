@@ -10,11 +10,9 @@ import {
 
 const router = Router();
 
-// All routes require authentication
 router.use(verifyJWT);
 
-// Two-person private messaging endpoints
-router.post("/:itemId/private-message", sendPrivateMessage);
+router.post("/:itemId/private-message/:otherUserId", sendPrivateMessage);
 router.get("/:itemId/private-messages/:otherUserId", getPrivateMessages);
 router.get("/:itemId/participants", getChatParticipants);
 router.get("/all-chats", getAllPrivateChats);

@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const CreateItem = () => {
   const navigate = useNavigate();
@@ -17,8 +24,17 @@ const CreateItem = () => {
     name: "",
     price: "",
     quantity: "",
+    category: "",
     picture: null,
   });
+
+  // Category options matching backend enum
+  const categories = [
+    { value: "Electronics", label: "Electronics" },
+    { value: "Fashion", label: "Fashion" },
+    { value: "Utilities", label: "Utilities" },
+    { value: "Entertainment", label: "Entertainment" },
+  ];
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -29,15 +45,21 @@ const CreateItem = () => {
     }
   };
 
+  const handleCategoryChange = (value) => {
+    setFormData((prev) => ({ ...prev, category: value }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
+    // Validation
     if (
       !formData.name ||
       !formData.price ||
       !formData.quantity ||
+      !formData.category ||
       !formData.picture
     ) {
       setError("All fields are required");
@@ -56,6 +78,7 @@ const CreateItem = () => {
       formDataToSend.append("name", formData.name);
       formDataToSend.append("price", formData.price);
       formDataToSend.append("quantity", formData.quantity);
+      formDataToSend.append("category", formData.category);
       formDataToSend.append("picture", formData.picture);
 
       const response = await Axios.post("/items/create-item", formDataToSend, {
@@ -66,10 +89,21 @@ const CreateItem = () => {
       });
 
       if (response.data) {
+        // Reset form
+        setFormData({
+          name: "",
+          price: "",
+          quantity: "",
+          category: "",
+          picture: null,
+        });
         navigate("/all-items");
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create item");
+      setError(
+        err.response?.data?.message ||
+          "Failed to create item. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -84,8 +118,16 @@ const CreateItem = () => {
               Access Denied
             </h2>
             <p className="text-muted-foreground">
-              Only sellers can create items.
+              Only sellers can create items. Please switch to a seller account
+              to create items.
             </p>
+            <Button
+              onClick={() => navigate("/all-items")}
+              className="mt-4 w-full"
+              variant="outline"
+            >
+              View All Items
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -117,6 +159,25 @@ const CreateItem = () => {
                   placeholder="Enter item name"
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={handleCategoryChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -169,6 +230,16 @@ const CreateItem = () => {
                 {loading ? "Creating Item..." : "Create Item"}
               </Button>
             </form>
+
+            <div className="mt-4 text-center">
+              <Button
+                onClick={() => navigate("/all-items")}
+                variant="outline"
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

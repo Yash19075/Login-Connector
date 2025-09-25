@@ -21,10 +21,12 @@ import userRoute from "./routes/user.routes.js";
 import itemRoute from "./routes/item.routes.js";
 import chatRoute from "./routes/chat.routes.js";
 import razorpayRoutes from "./routes/razorpay.routes.js";
+import orderRoutes from "./routes/order.routes.js"
 
 app.use("/api/v1/razorpay", razorpayRoutes);
 app.use("/api/v1/users", userRoute);
 app.use("/api/v1/items", itemRoute);
 app.use("/api/v1/chats", chatRoute);
+app.use("/api/v1/orders", orderRoutes);
 
 export { app };

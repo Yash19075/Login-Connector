@@ -8,7 +8,7 @@ import { Order } from "../models/order.model.js";
 
 const createItem = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
-  const { name, price, quantity } = req.body;
+  const { name, price, quantity, category } = req.body;
 
   if (!userId) {
     throw new ApiError(401, "User ID not found in request");
@@ -37,6 +37,7 @@ const createItem = asyncHandler(async (req, res) => {
     name,
     picture: picture.url,
     price,
+    category,
     quantity,
     postedBy: userId,
   });

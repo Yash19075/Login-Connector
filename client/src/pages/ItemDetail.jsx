@@ -18,6 +18,8 @@ import {
   Trash2,
   ShoppingCart,
   MessageCircle,
+  User,
+  Tag,
 } from "lucide-react";
 
 const ItemDetail = () => {
@@ -261,6 +263,59 @@ const ItemDetail = () => {
     );
   };
 
+  const getCategoryBadgeColor = (category) => {
+    switch (category?.toLowerCase()) {
+      case "electronics":
+        return "bg-blue-500 hover:bg-blue-600";
+      case "fashion":
+        return "bg-pink-500 hover:bg-pink-600";
+      case "utilities":
+        return "bg-green-500 hover:bg-green-600";
+      case "entertainment":
+        return "bg-purple-500 hover:bg-purple-600";
+      default:
+        return "bg-gray-500 hover:bg-gray-600";
+    }
+  };
+
+  // Component for clickable user names
+  const ClickableUserName = ({ user: userData, className = "", children }) => {
+    if (!userData || userData._id === user?._id) {
+      return <span className={className}>{children}</span>;
+    }
+
+    return (
+      <Link
+        to={`/profile/${userData._id}`}
+        className={`${className} hover:underline hover:text-primary transition-colors cursor-pointer inline-flex items-center gap-1`}
+      >
+        <User className="w-3 h-3" />
+        {children}
+      </Link>
+    );
+  };
+
+  // Helper function to get the correct private chat route
+  const getPrivateChatRoute = () => {
+    if (!item || !user) return "#";
+
+    const currentUserId = user._id;
+    const sellerId = item.postedBy._id;
+
+    // If current user is the seller, they would chat with buyers
+    // If current user is a buyer, they want to chat with the seller
+    // The route should be: /chats/{itemId}/{otherUserId}
+    // where otherUserId is the person you want to chat with
+
+    if (currentUserId === sellerId) {
+      // Seller wants to view all chats, redirect to seller chats page
+      return `/seller-chats/${itemId}`;
+    } else {
+      // Buyer wants to chat with seller
+      return `/chats/${itemId}/${sellerId}`;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen py-8 px-4">
@@ -322,7 +377,19 @@ const ItemDetail = () => {
                 />
               </div>
               <CardContent className="p-6">
-                <h1 className="text-3xl font-bold mb-4">{item.name}</h1>
+                <div className="flex items-start justify-between mb-4">
+                  <h1 className="text-3xl font-bold">{item.name}</h1>
+                  {item.category && (
+                    <Badge
+                      className={`${getCategoryBadgeColor(
+                        item.category
+                      )} text-white`}
+                    >
+                      <Tag className="w-3 h-3 mr-1" />
+                      {item.category}
+                    </Badge>
+                  )}
+                </div>
 
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-3xl font-bold text-primary">
@@ -366,11 +433,14 @@ const ItemDetail = () => {
 
                 <div className="space-y-2">
                   <h3 className="font-semibold">Seller Information</h3>
-                  <p className="text-muted-foreground">
+                  <ClickableUserName
+                    user={item.postedBy}
+                    className="text-muted-foreground font-medium"
+                  >
                     {item.postedBy?.fullName ||
                       item.postedBy?.username ||
                       "Unknown Seller"}
-                  </p>
+                  </ClickableUserName>
                   <p className="text-sm text-muted-foreground">
                     Role: {item.postedBy?.role || "Seller"}
                   </p>
@@ -380,24 +450,31 @@ const ItemDetail = () => {
                 {user?._id === item?.postedBy?._id ? (
                   <div className="mt-4">
                     <Button asChild className="w-full">
-                      <Link to={`/item/${itemId}/update`}>
+                      <Link to={`/item/${itemId}/updateItem`}>
                         <Edit className="w-4 h-4 mr-2" />
                         Edit Item
                       </Link>
                     </Button>
                   </div>
                 ) : (
-                  item?.quantity > 0 &&
-                  item?.status !== "out-of-stock" && (
-                    <div className="mt-4">
+                  <div className="mt-4 space-y-2">
+                    {/* Buy Button */}
+                    {item?.quantity > 0 && item?.status !== "out-of-stock" && (
                       <Button asChild className="w-full" size="lg">
                         <Link to={`/items/${itemId}/buy`}>
                           <ShoppingCart className="w-4 h-4 mr-2" />
                           Buy Now - ${item.price}
                         </Link>
                       </Button>
-                    </div>
-                  )
+                    )}
+                    {/* Private Chat Button - FIXED ROUTING */}
+                    <Button asChild className="w-full" variant="outline">
+                      <Link to={getPrivateChatRoute()}>
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        Message Seller Privately
+                      </Link>
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -510,7 +587,7 @@ const ItemDetail = () => {
                   <CardTitle>Public Messages</CardTitle>
                   {user?._id !== item?.postedBy?._id && (
                     <Button asChild variant="outline" size="sm">
-                      <Link to={`/chats/${itemId}/${item.postedBy._id}`}>
+                      <Link to={getPrivateChatRoute()}>
                         <MessageCircle className="w-4 h-4 mr-2" />
                         Private Chat
                       </Link>
@@ -555,11 +632,14 @@ const ItemDetail = () => {
                           }`}
                         >
                           <p className="text-sm">{msg.message}</p>
-                          <p className="text-xs opacity-70 mt-1">
+                          <ClickableUserName
+                            user={msg.sentBy}
+                            className="text-xs opacity-70 mt-1"
+                          >
                             {msg.sentBy?.fullName ||
                               msg.sentBy?.username ||
                               "Unknown"}
-                          </p>
+                          </ClickableUserName>
                           <p className="text-xs opacity-50">
                             {new Date(msg.createdAt).toLocaleString()}
                           </p>
@@ -570,43 +650,41 @@ const ItemDetail = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {user?._id !== item?.postedBy?._id ? (
-                  <div className="space-y-2">
-                    <form onSubmit={sendMessage} className="flex gap-2">
-                      <Input
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        placeholder="Type your public message..."
-                        className="flex-1"
-                      />
-                      <Button
-                        type="submit"
-                        disabled={sendingMessage || !messageText.trim()}
-                      >
-                        <Send className="w-4 h-4" />
+                <div className="space-y-2">
+                  <form onSubmit={sendMessage} className="flex gap-2">
+                    <Input
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      placeholder={
+                        user?._id === item?.postedBy?._id
+                          ? "Reply to buyers publicly..."
+                          : "Type your public message..."
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={sendingMessage || !messageText.trim()}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </form>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {user?._id === item?.postedBy?._id
+                      ? "Your public reply will be visible to all viewers"
+                      : "This message will be visible to everyone viewing this item"}
+                  </p>
+                  {user?._id === item?.postedBy?._id && (
+                    <div className="text-center mt-2">
+                      <Button asChild variant="outline" size="sm">
+                        <Link to={`/seller-chats/${itemId}`}>
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          View Private Chats
+                        </Link>
                       </Button>
-                    </form>
-                    <p className="text-xs text-muted-foreground text-center">
-                      This message will be visible to everyone viewing this item
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground text-center p-2 bg-muted rounded">
-                      This is your item. Buyers can message you here.
-                    </p>
-                    {user?._id === item?.postedBy?._id && (
-                      <div className="text-center">
-                        <Button asChild variant="outline" size="sm">
-                          <Link to={`/seller-chats/${itemId}`}>
-                            <MessageCircle className="w-4 h-4 mr-2" />
-                            View Private Chats
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -626,11 +704,14 @@ const ItemDetail = () => {
                         <div className="flex items-center">
                           {renderStars(review.rating)}
                         </div>
-                        <span className="font-medium text-sm">
+                        <ClickableUserName
+                          user={review.reviewBy}
+                          className="font-medium text-sm"
+                        >
                           {review.reviewBy?.fullName ||
                             review.reviewBy?.username ||
                             "Anonymous"}
-                        </span>
+                        </ClickableUserName>
                         {review.reviewBy?._id === user?._id && (
                           <Badge variant="secondary" className="text-xs">
                             Your review
